@@ -149,21 +149,29 @@ unsigned long efi_get_time(void)
 {
     EFI_TIME time;
     EFI_STATUS status;
-    struct efi_rs_state state = efi_rs_enter();
+    struct efi_rs_state state;
     unsigned long flags;
+    unsigned long ret;
 
-    if ( !state.cr3 )
-        return 0;
     spin_lock_irqsave(&rtc_lock, flags);
+    state = efi_rs_enter();
+    if ( !state.cr3 ) {
+        ret = 0;
+        goto out_unlock;
+    }
     status = efi_rs->GetTime(&time, NULL);
+
+    if ( EFI_ERROR(status) ) {
+        ret = 0;
+        goto out_unlock;
+    }
+
+    ret = mktime(time.Year, time.Month, time.Day,
+                 time.Hour, time.Minute, time.Second);
+out_unlock:
     spin_unlock_irqrestore(&rtc_lock, flags);
     efi_rs_leave(&state);
-
-    if ( EFI_ERROR(status) )
-        return 0;
-
-    return mktime(time.Year, time.Month, time.Day,
-                  time.Hour, time.Minute, time.Second);
+    return ret;
 }
 
 void efi_halt_system(void)
